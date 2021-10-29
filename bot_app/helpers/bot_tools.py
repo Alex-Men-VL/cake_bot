@@ -14,6 +14,14 @@ def get_markup(parameters):
     return markup
 
 
+def get_one_button_markup(text):
+    markup = types.InlineKeyboardMarkup()
+    continue_button = types.InlineKeyboardButton(text,
+                                                 callback_data=text)
+    markup.add(continue_button)
+    return markup
+
+
 async def send_message_with_decors(chat_id):
     markup = get_markup(DECORS)
     continue_button = types.InlineKeyboardButton('Без декора',
@@ -26,10 +34,7 @@ async def send_message_with_decors(chat_id):
 
 
 async def send_message_with_title(chat_id, state: FSMContext):
-    markup = types.InlineKeyboardMarkup()
-    continue_button = types.InlineKeyboardButton('Без надписи',
-                                                 callback_data='Без надписи')
-    markup.add(continue_button)
+    markup = get_one_button_markup('Без надписи')
     message = await bot.send_message(
         chat_id,
         'Добавьте надпись к торту по желанию (+ 500).\n'
@@ -41,3 +46,54 @@ async def send_message_with_title(chat_id, state: FSMContext):
     )
     async with state.proxy() as cake:
         cake['title_message_id'] = message.message_id
+
+
+async def send_message_with_comment(chat_id, state: FSMContext):
+    markup = get_one_button_markup('Без комментария')
+    message = await bot.send_message(
+        chat_id,
+        'Добавьте комментарий к заказу.',
+        disable_notification=True,
+        reply_markup=markup
+    )
+    async with state.proxy() as cake:
+        cake['comment_message_id'] = message.message_id
+
+
+async def send_message_with_address(chat_id, state: FSMContext):
+    markup = get_one_button_markup('Доставить по этому адресу')
+    address_from_bd = 'СПБ'
+    message = await bot.send_message(
+        chat_id,
+        f'Доставить заказ по адресу:\n{address_from_bd}\nИли напишите новый '
+        'адрес доставки.',
+        disable_notification=True,
+        reply_markup=markup
+    )
+    async with state.proxy() as cake:
+        cake['address_message_id'] = message.message_id
+        cake['address'] = address_from_bd
+
+
+async def send_message_with_date(chat_id, state: FSMContext):
+    message = await bot.send_message(
+        chat_id,
+        'Введите дату доставки',
+        disable_notification=True,
+        reply_markup=None
+    )
+    async with state.proxy() as cake:
+        cake['date_message_id'] = message.message_id
+
+
+async def finish_cake_collecting(chat_id, state: FSMContext):
+    keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True,
+                                         resize_keyboard=True,
+                                         row_width=2)
+    keyboard.add('Заказать торт', 'Собрать торт заново', 'Главное меню')
+    price = 1000
+    await bot.send_message(chat_id,
+                           f'Итоговая цена заказа: {price} р.',
+                           disable_notification=True,
+                           reply_markup=keyboard)
+    await state.finish()
