@@ -1,7 +1,7 @@
 import logging
 
 from .app import dp
-from . import common, create_cake
+from . import common, create_cake, registration
 
 
 logging.basicConfig(
