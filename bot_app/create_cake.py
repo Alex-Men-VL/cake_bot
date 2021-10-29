@@ -6,7 +6,8 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from .app import dp, bot
 from .helpers import LEVELS, SHAPES, TOPPINGS, BERRIES, DECORS
 from .helpers import get_markup, send_message_with_decors, \
-    send_message_with_title
+    send_message_with_title, send_message_with_comment, \
+    send_message_with_address, send_message_with_date, finish_cake_collecting
 
 
 class CreateCake(StatesGroup):
@@ -16,6 +17,10 @@ class CreateCake(StatesGroup):
     berries = State()
     decor = State()
     title = State()
+    comment = State()
+    address = State()
+    date = State()
+    time = State()
 
 
 @dp.message_handler(Text(equals='Собрать торт'), state='*')
@@ -263,7 +268,8 @@ async def get_title(callback_query: types.CallbackQuery,
     await bot.edit_message_text(chat_id=callback_query.from_user.id,
                                 message_id=callback_query.message.message_id,
                                 text='Без надписи')
-    await finish_cake_collecting(callback_query.from_user.id, state)
+    await send_message_with_comment(callback_query.from_user.id, state)
+    await CreateCake.next()
 
 
 @dp.message_handler(
@@ -278,19 +284,116 @@ async def get_title(message: types.Message, state: FSMContext):
     await bot.edit_message_text(chat_id=message.from_user.id,
                                 message_id=message_id,
                                 text=f'Надпись на торте: {title}')
+    await send_message_with_comment(message.from_user.id, state)
+    await CreateCake.next()
+
+
+@dp.callback_query_handler(
+    lambda choice: choice.data == 'Без комментария',
+    state=CreateCake.comment
+)
+async def get_comment(callback_query: types.CallbackQuery,
+                      state: FSMContext):
+    await bot.answer_callback_query(callback_query.id)
+    async with state.proxy() as cake:
+        cake['comment'] = 'Без комментария'
+
+    await bot.edit_message_text(chat_id=callback_query.from_user.id,
+                                message_id=callback_query.message.message_id,
+                                text='Без комментария')
+    await send_message_with_address(callback_query.from_user.id, state)
+    await CreateCake.next()
+
+
+@dp.message_handler(
+    content_types=types.ContentTypes.TEXT,
+    state=CreateCake.comment
+)
+async def get_comment(message: types.Message, state: FSMContext):
+    comment = message.text
+    async with state.proxy() as cake:
+        cake['comment'] = comment
+        message_id = cake['comment_message_id']
+
+    await bot.edit_message_text(chat_id=message.from_user.id,
+                                message_id=message_id,
+                                text=f'Комментарий к заказу: {comment}')
+    await send_message_with_address(message.from_user.id, state)
+    await CreateCake.next()
+
+
+@dp.callback_query_handler(
+    lambda choice: choice.data == 'Доставить по этому адресу',
+    state=CreateCake.address
+)
+async def get_address(callback_query: types.CallbackQuery,
+                      state: FSMContext):
+    await bot.answer_callback_query(callback_query.id)
+    async with state.proxy() as cake:
+        address = cake['address']
+
+    await bot.edit_message_text(chat_id=callback_query.from_user.id,
+                                message_id=callback_query.message.message_id,
+                                text=f'Доставить по адресу: {address}')
+
+    await send_message_with_date(callback_query.from_user.id, state)
+    await CreateCake.next()
+
+
+@dp.message_handler(
+    content_types=types.ContentTypes.TEXT,
+    state=CreateCake.address
+)
+async def get_address(message: types.Message, state: FSMContext):
+    address = message.text
+    async with state.proxy() as cake:
+        cake['address'] = address
+        message_id = cake['address_message_id']
+
+    await bot.edit_message_text(chat_id=message.from_user.id,
+                                message_id=message_id,
+                                text=f'Доставить по адресу: {address}')
+
+    await send_message_with_date(message.from_user.id, state)
+    await CreateCake.next()
+
+
+@dp.message_handler(
+    content_types=types.ContentTypes.TEXT,
+    state=CreateCake.date
+)
+async def get_date(message: types.Message, state: FSMContext):
+    date = message.text
+    async with state.proxy() as cake:
+        cake['date'] = date
+        message_id = cake['date_message_id']
+
+    await bot.edit_message_text(chat_id=message.from_user.id,
+                                message_id=message_id,
+                                text=f'Дата доставки: {date}')
+
+    message = await bot.send_message(
+        message.from_user.id,
+        'Введите время доставки',
+        disable_notification=True,
+        reply_markup=None
+    )
+    async with state.proxy() as cake:
+        cake['time_message_id'] = message.message_id
+    await CreateCake.next()
+
+
+@dp.message_handler(
+    content_types=types.ContentTypes.TEXT,
+    state=CreateCake.time
+)
+async def get_time(message: types.Message, state: FSMContext):
+    time = message.text
+    async with state.proxy() as cake:
+        cake['time'] = time
+        message_id = cake['time_message_id']
+
+    await bot.edit_message_text(chat_id=message.from_user.id,
+                                message_id=message_id,
+                                text=f'Время доставки: {time}')
     await finish_cake_collecting(message.from_user.id, state)
-
-
-async def finish_cake_collecting(chat_id, state: FSMContext):
-    keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True,
-                                         resize_keyboard=True,
-                                         row_width=2)
-    order_button = types.InlineKeyboardButton('Заказать торт')
-    reassemble_button = types.InlineKeyboardButton('Собрать торт заново')
-    keyboard.add(order_button, reassemble_button)
-    price = 1000
-    await bot.send_message(chat_id,
-                           f'Итоговая цена заказа: {price} р.',
-                           disable_notification=True,
-                           reply_markup=keyboard)
-    await state.finish()
